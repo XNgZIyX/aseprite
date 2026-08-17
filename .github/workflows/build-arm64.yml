@@ -14,6 +14,9 @@ jobs:
     timeout-minutes: 360
 
     steps:
+      - name: Pull Termux image
+        run: docker pull termux/termux-docker:aarch64
+
       - name: Build inside Termux (bionic) container
         run: |
           set +e
@@ -26,6 +29,7 @@ jobs:
               apt install -y -q \
                 ca-certificates cmake ninja clang git python gn pkg-config unzip \
                 libx11 libxcursor libxi libxrandr libglvnd-dev fontconfig
+              echo "### apt install done"
 
               cd "$HOME"
               git clone https://github.com/aseprite/aseprite.git aseprite
@@ -33,12 +37,15 @@ jobs:
               git checkout 844304553
               git submodule update --init --recursive
               cd "$HOME"
+              echo "### aseprite cloned"
 
               git clone -b aseprite-m124 https://github.com/aseprite/skia.git
               cd skia
               python3 tools/git-sync-deps
+              echo "### skia deps synced"
               gn gen out/Release-arm64 --args="is_debug=false is_official_build=true skia_use_system_expat=false skia_use_system_icu=false skia_use_system_libjpeg_turbo=false skia_use_system_libpng=false skia_use_system_libwebp=false skia_use_system_zlib=false skia_use_freetype=true skia_use_harfbuzz=true skia_pdf_subset_harfbuzz=true skia_use_system_freetype2=false skia_use_system_harfbuzz=false cc=\"clang\" cxx=\"clang++\""
               ninja -C out/Release-arm64 skia modules
+              echo "### skia built"
               cd "$HOME"
 
               cmake -S aseprite -B build -G Ninja \
@@ -46,11 +53,14 @@ jobs:
                 -DLAF_BACKEND=skia \
                 -DSKIA_DIR="$HOME/skia" \
                 -DSKIA_LIBRARY_DIR="$HOME/skia/out/Release-arm64"
+              echo "### cmake configured"
               cmake --build build --target aseprite
+              echo "### aseprite built"
 
               strip build/bin/aseprite
               tar -czf "$HOME/aseprite-linux-arm64.tar.gz" -C build/bin aseprite data
               ls -lh "$HOME/aseprite-linux-arm64.tar.gz"
+              echo "### packaged"
             ' > build.log 2>&1
           STATUS=$?
           docker cp termux-build:/data/data/com.termux/files/home/aseprite-linux-arm64.tar.gz "${GITHUB_WORKSPACE}/" 2>/dev/null || true
