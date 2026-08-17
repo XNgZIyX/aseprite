@@ -24,6 +24,7 @@ jobs:
             bash -c '
               set -e
               export GIT_SYNC_DEPS_SKIP_EMSDK=true
+              export HOME="$TMPDIR"
               apt update -y -q
               apt install -y -q x11-repo || true
               apt install -y -q \
@@ -31,12 +32,12 @@ jobs:
                 libx11 libxcursor libxi libxrandr libglvnd-dev fontconfig
               echo "### apt install done"
 
-              cd "$HOME"
+              cd "$TMPDIR"
               git clone https://github.com/aseprite/aseprite.git aseprite
               cd aseprite
               git checkout 844304553
               git submodule update --init --recursive
-              cd "$HOME"
+              cd "$TMPDIR"
               echo "### aseprite cloned"
 
               git clone -b aseprite-m124 https://github.com/aseprite/skia.git
@@ -46,24 +47,24 @@ jobs:
               gn gen out/Release-arm64 --args="is_debug=false is_official_build=true skia_use_system_expat=false skia_use_system_icu=false skia_use_system_libjpeg_turbo=false skia_use_system_libpng=false skia_use_system_libwebp=false skia_use_system_zlib=false skia_use_freetype=true skia_use_harfbuzz=true skia_pdf_subset_harfbuzz=true skia_use_system_freetype2=false skia_use_system_harfbuzz=false cc=\"clang\" cxx=\"clang++\""
               ninja -C out/Release-arm64 skia modules
               echo "### skia built"
-              cd "$HOME"
+              cd "$TMPDIR"
 
               cmake -S aseprite -B build -G Ninja \
                 -DCMAKE_BUILD_TYPE=RelWithDebInfo \
                 -DLAF_BACKEND=skia \
-                -DSKIA_DIR="$HOME/skia" \
-                -DSKIA_LIBRARY_DIR="$HOME/skia/out/Release-arm64"
+                -DSKIA_DIR="$TMPDIR/skia" \
+                -DSKIA_LIBRARY_DIR="$TMPDIR/skia/out/Release-arm64"
               echo "### cmake configured"
               cmake --build build --target aseprite
               echo "### aseprite built"
 
               strip build/bin/aseprite
-              tar -czf "$HOME/aseprite-linux-arm64.tar.gz" -C build/bin aseprite data
-              ls -lh "$HOME/aseprite-linux-arm64.tar.gz"
+              tar -czf "$TMPDIR/aseprite-linux-arm64.tar.gz" -C build/bin aseprite data
+              ls -lh "$TMPDIR/aseprite-linux-arm64.tar.gz"
               echo "### packaged"
             ' > build.log 2>&1
           STATUS=$?
-          docker cp termux-build:/data/data/com.termux/files/home/aseprite-linux-arm64.tar.gz "${GITHUB_WORKSPACE}/" 2>/dev/null || true
+          docker cp termux-build:/data/data/com.termux/files/usr/tmp/aseprite-linux-arm64.tar.gz "${GITHUB_WORKSPACE}/" 2>/dev/null || true
           docker rm -f termux-build >/dev/null 2>&1 || true
           tail -100 build.log
           exit $STATUS
