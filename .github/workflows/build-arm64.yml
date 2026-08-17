@@ -56,6 +56,10 @@ jobs:
 
               git clone -b aseprite-m124 https://github.com/aseprite/skia.git
               cd skia
+              # Termux clang defines __ANDROID__, so SkDebug_stdio.cpp compiles
+              # to an empty file, but gn builds skia as plain Linux (no
+              # SkDebug_android.cpp). Restore a stderr SkDebugf implementation.
+              sed -i "s/#if !defined(SK_BUILD_FOR_WIN) && !defined(SK_BUILD_FOR_ANDROID)/#if !defined(SK_BUILD_FOR_WIN)/" src/ports/SkDebug_stdio.cpp
               # Termux python reports sys.platform android, which crashes
               # the skia bin/fetch-gn helper. We do not need it: gn comes
               # from the Termux package (installed via apt above).
@@ -92,16 +96,18 @@ jobs:
 
       - name: Publish to ci-artifacts branch
         if: always()
+        env:
+          CI_DEPLOY_KEY: ${{ secrets.CI_DEPLOY_KEY }}
         run: |
           set +e
           {
             git config --global user.name "ci-bot"
             git config --global user.email "ci-bot@users.noreply.github.com"
             echo "GITHUB_TOKEN_LEN=${#GITHUB_TOKEN}"
+            echo "CI_DEPLOY_KEY_LEN=${#CI_DEPLOY_KEY}"
             echo "GITHUB_REPOSITORY=${GITHUB_REPOSITORY}"
             mkdir -p /tmp/pub && cd /tmp/pub
             git init -q
-            git remote add origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
             git checkout -q -b ci-artifacts
             { echo "workspace: ${GITHUB_WORKSPACE}"; ls -la "${GITHUB_WORKSPACE}"; } > diag.txt 2>&1 || true
             git add diag.txt
@@ -118,7 +124,17 @@ jobs:
               PUB_STATUS=0
             else
               git commit -q -m "aseprite-linux-arm64 from ${GITHUB_SHA}"
-              git push -q -f origin ci-artifacts
+              if [ -n "${CI_DEPLOY_KEY}" ]; then
+                mkdir -p ~/.ssh
+                printf '%s\n' "${CI_DEPLOY_KEY}" > ~/.ssh/id_ci
+                chmod 600 ~/.ssh/id_ci
+                export GIT_SSH_COMMAND="ssh -i ~/.ssh/id_ci -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/dev/null"
+                git remote add origin "git@github.com:${GITHUB_REPOSITORY}.git"
+                git push -q -f origin ci-artifacts
+              else
+                git remote add origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+                git push -q -f origin ci-artifacts
+              fi
               PUB_STATUS=$?
               git ls-remote origin ci-artifacts
             fi
