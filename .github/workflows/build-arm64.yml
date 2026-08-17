@@ -43,10 +43,10 @@ jobs:
 
               git clone -b aseprite-m124 https://github.com/aseprite/skia.git
               cd skia
-              # Termux python reports sys.platform='android', which crashes
-              # skia's bin/fetch-gn. We don't need it: gn comes from Termux's
-              # own package (installed via apt above), so make fetch-gn a no-op.
-              printf '#!/usr/bin/env python3\nimport sys\nsys.exit(0)\n' > bin/fetch-gn
+              # Termux python reports sys.platform android, which crashes
+              # the skia bin/fetch-gn helper. We do not need it: gn comes
+              # from the Termux package (installed via apt above).
+              : > bin/fetch-gn
               python3 tools/git-sync-deps
               echo "### skia deps synced"
               gn gen out/Release-arm64 --args="is_debug=false is_official_build=true skia_use_system_expat=false skia_use_system_icu=false skia_use_system_libjpeg_turbo=false skia_use_system_libpng=false skia_use_system_libwebp=false skia_use_system_zlib=false skia_use_freetype=true skia_use_harfbuzz=true skia_pdf_subset_harfbuzz=true skia_use_system_freetype2=false skia_use_system_harfbuzz=false cc=\"clang\" cxx=\"clang++\""
