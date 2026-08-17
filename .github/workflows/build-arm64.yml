@@ -1,4 +1,4 @@
-name: Build Aseprite Linux arm64
+name: Build Aseprite Termux arm64
 
 on:
   push:
@@ -14,49 +14,46 @@ jobs:
     timeout-minutes: 360
 
     steps:
-      - name: Install dependencies
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends \
-            git g++ clang cmake ninja-build python3 zip unzip \
-            libpixman-1-dev libfreetype6-dev libharfbuzz-dev zlib1g-dev \
-            libx11-dev libxcursor-dev libxi-dev libxrandr-dev libgl1-mesa-dev \
-            libfontconfig1-dev
-
-      - name: Clone Aseprite
-        run: |
-          git clone https://github.com/aseprite/aseprite.git aseprite
-          cd aseprite
-          git checkout 844304553
-          git submodule update --init --recursive
-
-      - name: Build Skia
+      - name: Build inside Termux (bionic) container
         env:
           GIT_SYNC_DEPS_SKIP_EMSDK: "true"
         run: |
-          git clone -b aseprite-m124 https://github.com/aseprite/skia.git
-          cd skia
-          python3 tools/git-sync-deps
-          python3 bin/fetch-gn
-          bin/gn gen out/Release-arm64 --args='is_debug=false is_official_build=true skia_use_system_expat=false skia_use_system_icu=false skia_use_system_libjpeg_turbo=false skia_use_system_libpng=false skia_use_system_libwebp=false skia_use_system_zlib=false skia_use_freetype=true skia_use_harfbuzz=true skia_pdf_subset_harfbuzz=true skia_use_system_freetype2=false skia_use_system_harfbuzz=false cc="clang" cxx="clang++"'
-          ninja -C out/Release-arm64 skia modules
+          docker run --rm \
+            -v "${GITHUB_WORKSPACE}:/out" \
+            termux/termux-docker:aarch64 \
+            bash -lc '
+              set -e
+              pkg update -y -q
+              pkg install -y -q x11-repo || true
+              pkg install -y -q \
+                ca-certificates cmake ninja clang git python gn pkg-config unzip \
+                libx11 libxcursor libxi libxrandr libglvnd-dev fontconfig
 
-      - name: Configure Aseprite
-        run: |
-          cmake -S aseprite -B build -G Ninja \
-            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-            -DLAF_BACKEND=skia \
-            -DSKIA_DIR="$(pwd)/skia" \
-            -DSKIA_LIBRARY_DIR="$(pwd)/skia/out/Release-arm64"
+              cd /tmp
+              git clone https://github.com/aseprite/aseprite.git aseprite
+              cd aseprite
+              git checkout 844304553
+              git submodule update --init --recursive
+              cd /tmp
 
-      - name: Compile
-        run: cmake --build build --target aseprite
+              git clone -b aseprite-m124 https://github.com/aseprite/skia.git
+              cd skia
+              python3 tools/git-sync-deps
+              gn gen out/Release-arm64 --args="is_debug=false is_official_build=true skia_use_system_expat=false skia_use_system_icu=false skia_use_system_libjpeg_turbo=false skia_use_system_libpng=false skia_use_system_libwebp=false skia_use_system_zlib=false skia_use_freetype=true skia_use_harfbuzz=true skia_pdf_subset_harfbuzz=true skia_use_system_freetype2=false skia_use_system_harfbuzz=false cc=\"clang\" cxx=\"clang++\""
+              ninja -C out/Release-arm64 skia modules
+              cd /tmp
 
-      - name: Package
-        run: |
-          strip build/bin/aseprite
-          tar -czf aseprite-linux-arm64.tar.gz -C build/bin aseprite data
-          ls -lh aseprite-linux-arm64.tar.gz
+              cmake -S aseprite -B build -G Ninja \
+                -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+                -DLAF_BACKEND=skia \
+                -DSKIA_DIR=/tmp/skia \
+                -DSKIA_LIBRARY_DIR=/tmp/skia/out/Release-arm64
+              cmake --build build --target aseprite
+
+              strip build/bin/aseprite
+              tar -czf /out/aseprite-linux-arm64.tar.gz -C build/bin aseprite data
+              ls -lh /out/aseprite-linux-arm64.tar.gz
+            '
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -66,6 +63,7 @@ jobs:
           if-no-files-found: error
 
       - name: Publish to ci-artifacts branch
+        if: always()
         run: |
           git config --global user.name "ci-bot"
           git config --global user.email "ci-bot@users.noreply.github.com"
@@ -73,7 +71,11 @@ jobs:
           git init -q
           git remote add origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           git checkout -q -b ci-artifacts
-          cp "${GITHUB_WORKSPACE}/aseprite-linux-arm64.tar.gz" .
-          git add aseprite-linux-arm64.tar.gz
-          git commit -q -m "aseprite-linux-arm64 from ${GITHUB_SHA}"
-          git push -q -f origin ci-artifacts
+          if [ -f "${GITHUB_WORKSPACE}/aseprite-linux-arm64.tar.gz" ]; then
+            cp "${GITHUB_WORKSPACE}/aseprite-linux-arm64.tar.gz" .
+            git add aseprite-linux-arm64.tar.gz
+            git commit -q -m "aseprite-linux-arm64 from ${GITHUB_SHA}"
+            git push -q -f origin ci-artifacts
+          else
+            echo "No artifact produced; skipping publish."
+          fi
