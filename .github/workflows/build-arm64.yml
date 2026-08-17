@@ -31,6 +31,10 @@ jobs:
               apt install -y -q \
                 ca-certificates cmake ninja clang git python gn pkg-config unzip \
                 libx11 libxcursor libxi libxrandr libglvnd-dev fontconfig
+              # Ensure the dev symlink exists for libGL (Termux package may
+              # only ship libGL.so.1; pick whichever file is present).
+              ln -sf libGL.so.1 /data/data/com.termux/files/usr/lib/libGL.so 2>/dev/null || true
+              GL_LIB=$(ls /data/data/com.termux/files/usr/lib/libGL.so* 2>/dev/null | head -1)
               echo "### apt install done"
 
               cd "$TMPDIR"
@@ -64,7 +68,7 @@ jobs:
                 -DLAF_BACKEND=skia \
                 -DSKIA_DIR="$TMPDIR/skia" \
                 -DSKIA_LIBRARY_DIR="$TMPDIR/skia/out/Release-arm64" \
-                -DSKIA_OPENGL_LIBRARY=/data/data/com.termux/files/usr/lib/libGL.so
+                -DSKIA_OPENGL_LIBRARY="$GL_LIB"
               echo "### cmake configured"
               cmake --build build --target aseprite
               echo "### aseprite built"
@@ -81,17 +85,6 @@ jobs:
           echo "log file:"; ls -la "$LOG" 2>&1 || true
           tail -100 "$LOG"
           exit $STATUS
-
-      - name: Upload artifact
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: aseprite-linux-arm64
-          path: |
-            aseprite-linux-arm64.tar.gz
-            build.log
-            publish.log
-          if-no-files-found: warn
 
       - name: Publish to ci-artifacts branch
         if: always()
@@ -116,12 +109,25 @@ jobs:
             fi
             if git diff --cached --quiet; then
               echo "Nothing to publish."
+              PUB_STATUS=0
             else
               git commit -q -m "aseprite-linux-arm64 from ${GITHUB_SHA}"
               git push -q -f origin ci-artifacts
+              PUB_STATUS=$?
               git ls-remote origin ci-artifacts
             fi
           } > "${GITHUB_WORKSPACE}/publish.log" 2>&1
-          STATUS=$?
+          STATUS=${PUB_STATUS:-1}
           tail -100 "${GITHUB_WORKSPACE}/publish.log"
           exit $STATUS
+
+      - name: Upload artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aseprite-linux-arm64
+          path: |
+            aseprite-linux-arm64.tar.gz
+            build.log
+            publish.log
+          if-no-files-found: warn
