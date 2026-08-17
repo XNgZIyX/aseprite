@@ -40,6 +40,9 @@ jobs:
               git submodule update --init --recursive
               # bionic (Android) has no aligned_alloc; use posix_memalign.
               sed -i "s/return aligned_alloc(alignment, bytes);/void* p = nullptr; return (posix_memalign(\&p, alignment, bytes) == 0) ? p : nullptr;/" laf/base/memory.cpp
+              # bionic (Android) has no pthread_getname_np; use prctl(PR_GET_NAME).
+              sed -i "s/#include <pthread.h>/#include <pthread.h>\n#include <sys\/prctl.h>/" laf/base/thread.cpp
+              sed -i "s/const int result = pthread_getname_np(pthread_self(), name, sizeof(name) - 1);/#ifdef __ANDROID__\n  const int result = prctl(PR_GET_NAME, name, sizeof(name) - 1);\n#else\n  const int result = pthread_getname_np(pthread_self(), name, sizeof(name) - 1);\n#endif/" laf/base/thread.cpp
               cd "$TMPDIR"
               echo "### aseprite cloned"
 
