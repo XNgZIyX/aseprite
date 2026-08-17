@@ -19,6 +19,7 @@ jobs:
 
       - name: Build inside Termux (bionic) container
         run: |
+          LOG="${GITHUB_WORKSPACE}/build.log"
           set +e
           docker run --name termux-build termux/termux-docker:aarch64 \
             bash -c '
@@ -66,11 +67,13 @@ jobs:
               tar -czf "$TMPDIR/aseprite-linux-arm64.tar.gz" -C build/bin aseprite data
               ls -lh "$TMPDIR/aseprite-linux-arm64.tar.gz"
               echo "### packaged"
-            ' > build.log 2>&1
+            ' >"$LOG" 2>&1
           STATUS=$?
           docker cp termux-build:/data/data/com.termux/files/usr/tmp/aseprite-linux-arm64.tar.gz "${GITHUB_WORKSPACE}/" 2>/dev/null || true
           docker rm -f termux-build >/dev/null 2>&1 || true
-          tail -100 build.log
+          echo "workspace contents:"; ls -la "${GITHUB_WORKSPACE}" || true
+          echo "log file:"; ls -la "$LOG" 2>&1 || true
+          tail -100 "$LOG"
           exit $STATUS
 
       - name: Upload artifact
@@ -92,6 +95,8 @@ jobs:
           git init -q
           git remote add origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           git checkout -q -b ci-artifacts
+          { echo "workspace: ${GITHUB_WORKSPACE}"; ls -la "${GITHUB_WORKSPACE}"; } > diag.txt 2>&1 || true
+          git add diag.txt
           if [ -f "${GITHUB_WORKSPACE}/build.log" ]; then
             cp "${GITHUB_WORKSPACE}/build.log" .
             git add build.log
@@ -105,4 +110,5 @@ jobs:
           else
             git commit -q -m "aseprite-linux-arm64 from ${GITHUB_SHA}"
             git push -q -f origin ci-artifacts
+            git ls-remote origin ci-artifacts
           fi
