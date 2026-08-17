@@ -30,7 +30,7 @@ jobs:
               apt install -y -q x11-repo || true
               apt install -y -q \
                 ca-certificates cmake ninja clang git python gn pkg-config unzip \
-                libx11 libxcursor libxi libxrandr libglvnd-dev fontconfig
+                libx11 libxcursor libxi libxrandr libglvnd libglvnd-dev fontconfig
               # Ensure the dev symlink exists for libGL (Termux package may
               # only ship libGL.so.1; pick whichever file is present).
               ls -la /data/data/com.termux/files/usr/lib/libGL* 2>&1 || true
