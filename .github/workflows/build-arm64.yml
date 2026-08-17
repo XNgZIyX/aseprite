@@ -90,31 +90,38 @@ jobs:
           path: |
             aseprite-linux-arm64.tar.gz
             build.log
+            publish.log
           if-no-files-found: warn
 
       - name: Publish to ci-artifacts branch
         if: always()
         run: |
-          git config --global user.name "ci-bot"
-          git config --global user.email "ci-bot@users.noreply.github.com"
-          mkdir -p /tmp/pub && cd /tmp/pub
-          git init -q
-          git remote add origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-          git checkout -q -b ci-artifacts
-          { echo "workspace: ${GITHUB_WORKSPACE}"; ls -la "${GITHUB_WORKSPACE}"; } > diag.txt 2>&1 || true
-          git add diag.txt
-          if [ -f "${GITHUB_WORKSPACE}/build.log" ]; then
-            cp "${GITHUB_WORKSPACE}/build.log" .
-            git add build.log
-          fi
-          if [ -f "${GITHUB_WORKSPACE}/aseprite-linux-arm64.tar.gz" ]; then
-            cp "${GITHUB_WORKSPACE}/aseprite-linux-arm64.tar.gz" .
-            git add aseprite-linux-arm64.tar.gz
-          fi
-          if git diff --cached --quiet; then
-            echo "Nothing to publish."
-          else
-            git commit -q -m "aseprite-linux-arm64 from ${GITHUB_SHA}"
-            git push -q -f origin ci-artifacts
-            git ls-remote origin ci-artifacts
-          fi
+          set +e
+          {
+            git config --global user.name "ci-bot"
+            git config --global user.email "ci-bot@users.noreply.github.com"
+            mkdir -p /tmp/pub && cd /tmp/pub
+            git init -q
+            git remote add origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+            git checkout -q -b ci-artifacts
+            { echo "workspace: ${GITHUB_WORKSPACE}"; ls -la "${GITHUB_WORKSPACE}"; } > diag.txt 2>&1 || true
+            git add diag.txt
+            if [ -f "${GITHUB_WORKSPACE}/build.log" ]; then
+              cp "${GITHUB_WORKSPACE}/build.log" .
+              git add build.log
+            fi
+            if [ -f "${GITHUB_WORKSPACE}/aseprite-linux-arm64.tar.gz" ]; then
+              cp "${GITHUB_WORKSPACE}/aseprite-linux-arm64.tar.gz" .
+              git add aseprite-linux-arm64.tar.gz
+            fi
+            if git diff --cached --quiet; then
+              echo "Nothing to publish."
+            else
+              git commit -q -m "aseprite-linux-arm64 from ${GITHUB_SHA}"
+              git push -q -f origin ci-artifacts
+              git ls-remote origin ci-artifacts
+            fi
+          } > "${GITHUB_WORKSPACE}/publish.log" 2>&1
+          STATUS=$?
+          tail -100 "${GITHUB_WORKSPACE}/publish.log"
+          exit $STATUS
