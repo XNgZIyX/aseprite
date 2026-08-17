@@ -33,8 +33,12 @@ jobs:
                 libx11 libxcursor libxi libxrandr libglvnd-dev fontconfig
               # Ensure the dev symlink exists for libGL (Termux package may
               # only ship libGL.so.1; pick whichever file is present).
-              ln -sf libGL.so.1 /data/data/com.termux/files/usr/lib/libGL.so 2>/dev/null || true
-              GL_LIB=$(ls /data/data/com.termux/files/usr/lib/libGL.so* 2>/dev/null | head -1)
+              ls -la /data/data/com.termux/files/usr/lib/libGL* 2>&1 || true
+              GL_LIB=$(ls /data/data/com.termux/files/usr/lib/libGL.so.1* 2>/dev/null | head -1)
+              if [ -z "$GL_LIB" ]; then
+                GL_LIB=$(ls /data/data/com.termux/files/usr/lib/libGL.so* 2>/dev/null | head -1)
+              fi
+              echo "GL_LIB=$GL_LIB"
               echo "### apt install done"
 
               cd "$TMPDIR"
@@ -93,6 +97,8 @@ jobs:
           {
             git config --global user.name "ci-bot"
             git config --global user.email "ci-bot@users.noreply.github.com"
+            echo "GITHUB_TOKEN_LEN=${#GITHUB_TOKEN}"
+            echo "GITHUB_REPOSITORY=${GITHUB_REPOSITORY}"
             mkdir -p /tmp/pub && cd /tmp/pub
             git init -q
             git remote add origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
