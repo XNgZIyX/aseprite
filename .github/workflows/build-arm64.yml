@@ -70,11 +70,14 @@ jobs:
           exit $STATUS
 
       - name: Upload artifact
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: aseprite-linux-arm64
-          path: aseprite-linux-arm64.tar.gz
-          if-no-files-found: error
+          path: |
+            aseprite-linux-arm64.tar.gz
+            build.log
+          if-no-files-found: warn
 
       - name: Publish to ci-artifacts branch
         if: always()
