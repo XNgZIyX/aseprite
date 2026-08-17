@@ -38,6 +38,8 @@ jobs:
               cd aseprite
               git checkout 844304553
               git submodule update --init --recursive
+              # bionic (Android) has no aligned_alloc; use posix_memalign.
+              sed -i "s/return aligned_alloc(alignment, bytes);/void* p = nullptr; return (posix_memalign(\&p, alignment, bytes) == 0) ? p : nullptr;/" laf/base/memory.cpp
               cd "$TMPDIR"
               echo "### aseprite cloned"
 
