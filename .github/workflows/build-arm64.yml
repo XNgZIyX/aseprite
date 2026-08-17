@@ -15,45 +15,48 @@ jobs:
 
     steps:
       - name: Build inside Termux (bionic) container
-        env:
-          GIT_SYNC_DEPS_SKIP_EMSDK: "true"
         run: |
-          docker run --rm \
-            -v "${GITHUB_WORKSPACE}:/out" \
-            termux/termux-docker:aarch64 \
-            bash -lc '
+          set +e
+          docker run --name termux-build termux/termux-docker:aarch64 \
+            bash -c '
               set -e
-              pkg update -y -q
-              pkg install -y -q x11-repo || true
-              pkg install -y -q \
+              export GIT_SYNC_DEPS_SKIP_EMSDK=true
+              apt update -y -q
+              apt install -y -q x11-repo || true
+              apt install -y -q \
                 ca-certificates cmake ninja clang git python gn pkg-config unzip \
                 libx11 libxcursor libxi libxrandr libglvnd-dev fontconfig
 
-              cd /tmp
+              cd "$HOME"
               git clone https://github.com/aseprite/aseprite.git aseprite
               cd aseprite
               git checkout 844304553
               git submodule update --init --recursive
-              cd /tmp
+              cd "$HOME"
 
               git clone -b aseprite-m124 https://github.com/aseprite/skia.git
               cd skia
               python3 tools/git-sync-deps
               gn gen out/Release-arm64 --args="is_debug=false is_official_build=true skia_use_system_expat=false skia_use_system_icu=false skia_use_system_libjpeg_turbo=false skia_use_system_libpng=false skia_use_system_libwebp=false skia_use_system_zlib=false skia_use_freetype=true skia_use_harfbuzz=true skia_pdf_subset_harfbuzz=true skia_use_system_freetype2=false skia_use_system_harfbuzz=false cc=\"clang\" cxx=\"clang++\""
               ninja -C out/Release-arm64 skia modules
-              cd /tmp
+              cd "$HOME"
 
               cmake -S aseprite -B build -G Ninja \
                 -DCMAKE_BUILD_TYPE=RelWithDebInfo \
                 -DLAF_BACKEND=skia \
-                -DSKIA_DIR=/tmp/skia \
-                -DSKIA_LIBRARY_DIR=/tmp/skia/out/Release-arm64
+                -DSKIA_DIR="$HOME/skia" \
+                -DSKIA_LIBRARY_DIR="$HOME/skia/out/Release-arm64"
               cmake --build build --target aseprite
 
               strip build/bin/aseprite
-              tar -czf /out/aseprite-linux-arm64.tar.gz -C build/bin aseprite data
-              ls -lh /out/aseprite-linux-arm64.tar.gz
-            '
+              tar -czf "$HOME/aseprite-linux-arm64.tar.gz" -C build/bin aseprite data
+              ls -lh "$HOME/aseprite-linux-arm64.tar.gz"
+            ' > build.log 2>&1
+          STATUS=$?
+          docker cp termux-build:/data/data/com.termux/files/home/aseprite-linux-arm64.tar.gz "${GITHUB_WORKSPACE}/" 2>/dev/null || true
+          docker rm -f termux-build >/dev/null 2>&1 || true
+          tail -100 build.log
+          exit $STATUS
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -71,11 +74,17 @@ jobs:
           git init -q
           git remote add origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           git checkout -q -b ci-artifacts
+          if [ -f "${GITHUB_WORKSPACE}/build.log" ]; then
+            cp "${GITHUB_WORKSPACE}/build.log" .
+            git add build.log
+          fi
           if [ -f "${GITHUB_WORKSPACE}/aseprite-linux-arm64.tar.gz" ]; then
             cp "${GITHUB_WORKSPACE}/aseprite-linux-arm64.tar.gz" .
             git add aseprite-linux-arm64.tar.gz
+          fi
+          if git diff --cached --quiet; then
+            echo "Nothing to publish."
+          else
             git commit -q -m "aseprite-linux-arm64 from ${GITHUB_SHA}"
             git push -q -f origin ci-artifacts
-          else
-            echo "No artifact produced; skipping publish."
           fi
